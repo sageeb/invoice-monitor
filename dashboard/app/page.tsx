@@ -140,7 +140,9 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
   const fetchInvoices = useCallback(async () => {
     try {
       setError(null);
-      const res = await fetch(`/api/invoices?token=${encodeURIComponent(token)}`);
+      const res = await fetch('/api/invoices', {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
       if (res.status === 401) {
         onLogout();
         return;
