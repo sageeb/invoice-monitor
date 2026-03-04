@@ -39,11 +39,13 @@ const EXCLUDE_KEYWORDS = [
   'כרטיס אשראי', // credit card
   'credit card',
   'חיוב בכרטיס', // card charge
+  'פנגו',        // Pango parking
 ];
 
-const SEARCH_QUERY_DAYS = 30;
+const SEARCH_QUERY_DAYS = 14;
 const DATA_SHEET_NAME = 'Invoices';
 const CONFIG_SHEET_NAME = 'Config';
+const MAX_RUNTIME_MS = 5 * 60 * 1000; // 5 minutes (leave 1 min buffer before 6 min limit)
 
 // ─── Main Entry Point ────────────────────────────────────────────────────────
 
@@ -52,6 +54,7 @@ const CONFIG_SHEET_NAME = 'Config';
  * Called by time-driven trigger or manually.
  */
 function scanGmail() {
+  const startTime = Date.now();
   const sheet = getOrCreateDataSheet();
   const processedIds = getProcessedIds();
   let newCount = 0;
@@ -66,6 +69,12 @@ function scanGmail() {
     const messages = thread.getMessages();
 
     for (const message of messages) {
+      // Check if we're running out of time
+      if (Date.now() - startTime > MAX_RUNTIME_MS) {
+        Logger.log('Approaching time limit. Stopping. Processed ' + newCount + ' new invoices. Will continue on next run.');
+        return;
+      }
+
       const messageId = message.getId();
 
       if (processedIds.has(messageId)) {
@@ -161,7 +170,8 @@ function extractInvoiceLinks(html) {
 
   const invoiceLinkKeywords = [
     'invoice', 'חשבונית', 'payment', 'תשלום', 'bill',
-    'pay', 'receipt', 'קבלה', 'view', 'download', 'pdf'
+    'pay', 'receipt', 'קבלה', 'view', 'download', 'pdf',
+    'צפה', 'צפייה', 'להצגה', 'לצפייה', 'הצג', 'לחץ כאן', 'פתח',
   ];
 
   while ((match = urlRegex.exec(html)) !== null) {

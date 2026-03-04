@@ -102,23 +102,52 @@ ${truncatedText}`;
  */
 function extractTextFromPdf(pdfBlob) {
   try {
-    // Create a temporary Google Doc from the PDF (OCR-enabled)
-    const resource = {
-      title: 'temp_invoice_' + Date.now(),
-      mimeType: 'application/pdf'
+    var blob = pdfBlob.getAs('application/pdf');
+    var token = ScriptApp.getOAuthToken();
+
+    // Upload PDF to Drive as a Google Doc using REST API
+    var metadata = {
+      name: 'temp_invoice_' + Date.now(),
+      mimeType: 'application/vnd.google-apps.document'
     };
 
-    const file = Drive.Files.insert(resource, pdfBlob, {
-      ocr: true,
-      ocrLanguage: 'he'
-    });
+    var boundary = '-----boundary' + Date.now();
+    var requestBody =
+      '--' + boundary + '\r\n' +
+      'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+      JSON.stringify(metadata) + '\r\n' +
+      '--' + boundary + '\r\n' +
+      'Content-Type: application/pdf\r\n' +
+      'Content-Transfer-Encoding: base64\r\n\r\n' +
+      Utilities.base64Encode(blob.getBytes()) + '\r\n' +
+      '--' + boundary + '--';
+
+    var response = UrlFetchApp.fetch(
+      'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',
+      {
+        method: 'post',
+        headers: {
+          'Authorization': 'Bearer ' + token,
+          'Content-Type': 'multipart/related; boundary=' + boundary
+        },
+        payload: requestBody,
+        muteHttpExceptions: true
+      }
+    );
+
+    if (response.getResponseCode() !== 200) {
+      Logger.log('Drive upload failed: ' + response.getContentText());
+      return '';
+    }
+
+    var file = JSON.parse(response.getContentText());
 
     // Open the converted doc and extract text
-    const doc = DocumentApp.openById(file.id);
-    const text = doc.getBody().getText();
+    var doc = DocumentApp.openById(file.id);
+    var text = doc.getBody().getText();
 
     // Clean up — delete the temporary file
-    Drive.Files.remove(file.id);
+    DriveApp.getFileById(file.id).setTrashed(true);
 
     return text;
   } catch (e) {
@@ -137,6 +166,7 @@ function fetchLinkContent(url) {
     const response = UrlFetchApp.fetch(url, {
       muteHttpExceptions: true,
       followRedirects: true,
+      validateHttpsCertificates: false,
       headers: {
         'User-Agent': 'Mozilla/5.0 (compatible; InvoiceMonitor/1.0)'
       }
